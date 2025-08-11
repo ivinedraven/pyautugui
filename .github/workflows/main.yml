@@ -50,15 +50,21 @@ jobs:
     steps:
       - name: 🐳 Set up Docker
         uses: docker/setup-buildx-action@v3
-
-      - name: 🐳 Pull Docker Image
-        run: docker pull nduythanh1/selenium-videozz-multiprocess
-
-      - name: ▶️ Run 2 Docker Containers in Parallel
+    
+      - name: 🐳 Pull Docker Images
         run: |
-          docker run -d --name container1 -e JOB_ID=${{ matrix.job_id }} nduythanh1/selenium-videozz-multiprocess
-          docker run -d --name container2 -e JOB_ID=${{ matrix.job_id }} nduythanh1/selenium-videozz-multiprocess
-
-          # Đợi cả 2 container hoàn tất
-          docker wait container1
-          docker wait container2
+          docker pull nduythanh1/selenium-videozz-multiprocess:latest
+          docker pull nduythanh1/selenium-earnvids-app2:latest
+    
+      - name: ▶️ Run 4 Docker Containers in Parallel
+        run: |
+          # 2 containers từ selenium-videozz-multiprocess
+          docker run -d --name svmp1 -e JOB_ID=${{ matrix.job_id }} nduythanh1/selenium-videozz-multiprocess:latest
+          docker run -d --name svmp2 -e JOB_ID=${{ matrix.job_id }} nduythanh1/selenium-videozz-multiprocess:latest
+    
+          # 2 containers từ selenium-earnvids-app2
+          docker run -d --name seapp2-1 -e JOB_ID=${{ matrix.job_id }} nduythanh1/selenium-earnvids-app2:latest
+          docker run -d --name seapp2-2 -e JOB_ID=${{ matrix.job_id }} nduythanh1/selenium-earnvids-app2:latest
+    
+          # Chờ tất cả 4 container kết thúc song song
+          docker wait svmp1 svmp2 seapp2-1 seapp2-2
