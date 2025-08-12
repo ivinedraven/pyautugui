@@ -39,7 +39,7 @@ jobs:
   run-docker:
     name: Run Docker Containers (Ubuntu)
     runs-on: ubuntu-latest
-    needs: run-pyautogui    # ✅ Chỉ chạy sau khi job Windows chạy xong
+
     timeout-minutes: 15
     strategy:
       matrix:
