@@ -1,5 +1,6 @@
-FROM python:3.10-slim
+FROM python:3.10-bullseye
 
+# Cài dependencies hệ thống cho Chrome & Selenium
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -20,23 +21,23 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Cài Google Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" \
-        > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
+# Cài Google Chrome stable (từ .deb chính thức)
+RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get update && apt-get install -y ./google-chrome-stable_current_amd64.deb \
+    && rm google-chrome-stable_current_amd64.deb \
+    && google-chrome --version
+
+WORKDIR /app
 
 # Cài Python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /app
+# Copy source code
 COPY . .
 
+# Thiết lập biến môi trường cho Chrome
 ENV DISPLAY=:99
-# Thiết lập biến môi trường để Chrome nằm trong PATH
 ENV CHROME_PATH=/usr/bin/google-chrome
 
 CMD ["python", "main.py"]
