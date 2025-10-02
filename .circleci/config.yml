@@ -1,46 +1,77 @@
 version: 2.1
 
 executors:
-  python-executor:
+  docker-executor:
     docker:
-      - image: cimg/python:3.10
+      - image: cimg/base:stable
+    working_directory: ~/repo
+    # Nếu cần tài nguyên mạnh hơn khi chạy 3 container/song song:
+    # resource_class: large
+
+parameters:
+  instance:
+    type: integer
+    default: 1
 
 jobs:
-  run-script:
+  build:
+    executor: docker-executor
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build Docker image
+          command: |
+            docker build -t myapp:latest .
+      - run:
+          name: Save image to workspace
+          command: |
+            docker save myapp:latest -o myapp.tar
+      - persist_to_workspace:
+          root: ~/repo
+          paths:
+            - myapp.tar
+
+  run-containers:
+    executor: docker-executor
     parameters:
       instance:
         type: integer
-    executor: python-executor
     steps:
       - checkout
-
+      - setup_remote_docker
+      - attach_workspace:
+          at: ~/repo
       - run:
-          name: Install Google Chrome
+          name: Load image from workspace
           command: |
-            sudo apt-get update
-            sudo apt-get install -y wget gnupg ca-certificates
-            wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-            sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
-            google-chrome --version
-
+            docker load -i myapp.tar
       - run:
-          name: Install dependencies
-          command: pip install --no-cache-dir -r requirements.txt
-
-      - run:
-          name: Run main.py 3 times in parallel (15 minutes max)
+          name: Run 3 containers in parallel (15 minutes each)
           command: |
             echo "Running instance << parameters.instance >>"
-            timeout 15m python main.py &
-            timeout 15m python main.py &
-            timeout 15m python main.py &
-            wait
+            pids=()
+            for i in 1 2 3; do
+              echo "Starting container $i for instance << parameters.instance >>"
+              # chạy 15 phút rồi tự dừng
+              timeout 900 docker run --rm myapp:latest &
+              pids+=($!)
+            done
+
+            status=0
+            for pid in "${pids[@]}"; do
+              wait "$pid" || status=1
+            done
+            exit $status
 
 workflows:
   version: 2
-  run-matrix:
+  build_and_run:
     jobs:
-      - run-script:
+      - build
+      - run-containers:
+          requires:
+            - build
           matrix:
             parameters:
-              instance: [1,2]
+              instance: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
