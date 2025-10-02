@@ -1,5 +1,9 @@
+selenium
+chromedriver_autoinstaller
+pyvirtualdisplay
 pyautogui
-pygetwindow
+fake-useragent
+mss
+imageio[ffmpeg]
+webdriver-manager
 requests
-pillow
-opencv_python
