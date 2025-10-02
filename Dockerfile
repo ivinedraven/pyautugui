@@ -1,36 +1,42 @@
-# Dockerfile
 FROM python:3.10-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-# 1. Cài các gói hệ thống cần thiết cho GUI ảo & PyAutoGUI
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget gnupg2 ca-certificates \
-    xvfb openbox x11-utils x11-xserver-utils xauth \
-    xvfb openbox x11-utils scrot libx11-6 libxrender1 libxtst6 libxi6 \
-    wget curl fonts-liberation \
-    scrot \
-    libxtst6 libxrender1 libxi6 libx11-6 \
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    unzip \
+    gnupg \
+    xvfb \
+    libxi6 \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libappindicator1 \
     fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
-
-# 2. Cài Chrome
-RUN wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-      > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && apt-get install -y --no-install-recommends google-chrome-stable && \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libasound2 \
+    libxshmfence1 \
+    xdg-utils \
+    --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# 3. Copy code & cài Python packages
+# Cài Google Chrome
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" \
+        > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cài Python packages
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 WORKDIR /app
-COPY . /app
+COPY . .
 
-# Yêu cầu Python packages
-RUN pip install --no-cache-dir \
-    pyautogui pygetwindow pillow opencv-python requests PyYAML
-
-# 4. Chạy Xvfb + openbox + main.py
 ENV DISPLAY=:99
-CMD sh -c "Xvfb :99 -screen 0 1280x720x24 & \
-           sleep 10 && openbox & \
-           python /app/main.py"
+# Thiết lập biến môi trường để Chrome nằm trong PATH
+ENV CHROME_PATH=/usr/bin/google-chrome
+
+CMD ["python", "main.py"]
