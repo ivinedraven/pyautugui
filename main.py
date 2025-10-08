@@ -1,191 +1,134 @@
-import time
+# main_ci.py
+import os, time, random, logging, requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
-import random
-from fake_useragent import UserAgent
-import pickle
-import re
-import chromedriver_autoinstaller
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os
-os.environ["CHROME_PATH"] = "/usr/bin/google-chrome"
+from fake_useragent import UserAgent
+import chromedriver_autoinstaller
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 chromedriver_autoinstaller.install()
 
-def create_chrome_options():
+def create_options(headless=True, proxy=None):
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
+    if headless:
+        options.add_argument("--headless=new")
     options.add_argument("--disable-blink-features=AutomationControlled")
     ua = UserAgent()
     options.add_argument(f"user-agent={ua.random}")
-    options.add_argument('--start-maximized')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1280,800')
+    if proxy:
+        options.add_argument(f'--proxy-server={proxy}')
     return options
 
+def human_random_wait(base=5, jitter=3):
+    t = base + random.uniform(0, jitter)
+    logging.info(f"sleep {t:.1f}s")
+    time.sleep(t)
 
-
-# Di chuyển chuột ngẫu nhiên
-def random_mouse_move(driver):
+def random_mouse_activity(driver):
     try:
-        # Lấy kích thước cửa sổ hiện tại
-        window_width = driver.execute_script("return window.innerWidth;")
-        window_height = driver.execute_script("return window.innerHeight;")
-
-        # Di chuyển chuột trong phạm vi cửa sổ trình duyệt
-        action = ActionChains(driver)
-        x_offset = random.randint(-window_width//2, window_width//2)
-        y_offset = random.randint(-window_height//2, window_height//2)
-
-        # Di chuyển chuột ngẫu nhiên trong phạm vi này
-        action.move_by_offset(x_offset, y_offset).perform()
-        time.sleep(random.uniform(0.5, 1.5))  # Đảm bảo thời gian di chuyển không quá nhanh
-
+        # scroll a bit and move
+        driver.execute_script("window.scrollBy(0, 200);")
+        time.sleep(random.uniform(0.3, 1.0))
+        # small mouse move via JS (selenium cannot truly move OS mouse in headless)
+        driver.execute_script("window.scrollBy(0, -100);")
     except Exception as e:
-        # Kiểm tra và xử lý lỗi liên quan đến di chuyển chuột
-        print(f"Error: {e}")
+        logging.debug("mouse act error: %s", e)
 
-        # Cuộn trang để phần tử có thể nằm trong tầm nhìn
-        driver.execute_script("window.scrollBy(0, 250);")  # Cuộn trang xuống
-        time.sleep(1)  # Thời gian nghỉ ngắn sau khi cuộn
+def safe_click_play(driver):
+    try:
+        play_button_xpath = "//button[@title='Play Video']"
+        WebDriverWait(driver, 8).until(EC.element_to_be_clickable((By.XPATH, play_button_xpath)))
+        el = driver.find_element(By.XPATH, play_button_xpath)
+        driver.execute_script("arguments[0].scrollIntoView(true);", el)
+        el.click()
+        return True
+    except Exception as e:
+        logging.debug("click play error: %s", e)
+        # fallback: click vplayer
+        try:
+            driver.execute_script("document.getElementById('vplayer') && document.getElementById('vplayer').click();")
+            return True
+        except Exception as e2:
+            logging.debug("fallback click error: %s", e2)
+            return False
 
+def run_worker(links, headless=True, proxy=None, screenshots_dir="screens"):
+    driver = None
+    tries = 0
+    while tries < 3:
+        try:
+            options = create_options(headless=headless, proxy=proxy)
+            driver = webdriver.Chrome(options=options)
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            break
+        except Exception as e:
+            logging.warning("Failed to start Chrome, retrying... %s", e)
+            tries += 1
+            time.sleep(3)
+    if not driver:
+        logging.error("Cannot start driver.")
+        return
 
-def run_main_selenium():
-    import requests
+    for idx, link in enumerate(links):
+        try:
+            logging.info("Opening %s", link)
+            driver.get(link)
+            human_random_wait(base=3, jitter=4)
+            random_mouse_activity(driver)
+            ok = safe_click_play(driver)
+            if ok:
+                human_random_wait(base=30, jitter=10)  # watch some time
+            # screenshot
+            os.makedirs(screenshots_dir, exist_ok=True)
+            fn = f"{screenshots_dir}/shot_{idx}_{int(time.time())}.png"
+            driver.save_screenshot(fn)
+            logging.info("Saved %s", fn)
+            # small random extra interactions
+            if random.random() < 0.4:
+                driver.execute_script("window.scrollBy(0, 200);")
+            human_random_wait(base=5, jitter=5)
+        except Exception as e:
+            logging.exception("Error processing link %s: %s", link, e)
 
-    # URL chứa file .txt
-    url = "https://raw.githubusercontent.com/anisidina29/earn/refs/heads/main/videzzz_link.2txt"
+    try:
+        driver.quit()
+    except Exception:
+        pass
 
-    # Tải nội dung từ URL
-    response = requests.get(url)
-    response.raise_for_status()  # Gây lỗi nếu tải thất bại
-
-    # Chuyển mỗi dòng thành một phần tử trong list
-    link_list = response.text.strip().splitlines()
-
-    # Chọn ngẫu nhiên 2 link
-    selected_links = random.sample(link_list, 2)
-
-    # Nhân đôi danh sách đã chọn
-    selected_links = selected_links + selected_links
-
-    print(selected_links)
-
-    for link in selected_links:
-      for i in ["1", "2", "2"]:
-        driver = webdriver.Chrome(options=create_chrome_options())
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
-        driver.get("https://www.dailymotion.com/playlist/x9dd5m")
-        time.sleep(random.uniform(5, 10))
-
-        driver.get(link)
-        time.sleep(random.uniform(3, 5))
-        random_mouse_move(driver)
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//div[@id='vplayer']")))
-
-        for i in range(5):
-            try:
-                play_button_xpath = "//button[@title='Play Video']"
-                WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, play_button_xpath)))
-                play_button = driver.find_element(By.XPATH, play_button_xpath)
-                driver.execute_script("arguments[0].scrollIntoView(true);", play_button)
-                # driver.save_screenshot("screenshot_{}.png".format(time.time()))
-                play_button.click()
-
-                # Click Play
-                driver.execute_script("""
-                    var playButton = document.evaluate("//div[@id='vplayer']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-                    if (playButton) {
-                        playButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        setTimeout(function() { playButton.click(); }, 500);
-                    }""")
-                time.sleep(5)
-                driver.save_screenshot(f"screenshot_{i}.png")
-                random_mouse_move(driver)
-                random_mouse_move(driver)
-
-            except Exception as e:
-                    print(f"Error: {e}")
-                    try:
-                        driver.execute_script("""
-                                    var element = document.getElementById('vplayer');
-                                  var clickEvent = new MouseEvent('click', {
-                                    bubbles: true,
-                                    cancelable: true,
-                                    view: window
-                                  });
-                                  element.dispatchEvent(clickEvent); """)
-
-
-                        try:
-                                element = driver.find_element(By.XPATH, play_button_xpath)
-                                actions = ActionChains(driver)
-
-                                # Click tại tọa độ (x_offset, y_offset) so với phần tử
-                                actions.move_to_element_with_offset(element, 5, 5).click().perform()
-                                time.sleep(30)
-                                driver.save_screenshot("screenshot_{}.png".format(i))
-                        except Exception as e:
-                                print(f"PyAutoGUI click failed: {e}")
-
-                    except Exception as click_error:
-                        print(f"Khong the click toa do: {click_error}")
-        time.sleep(150)
-        driver.save_screenshot("screenshot_final.png")
-
-
-      # Tải video
-      download_button_xpath = "//a[@class='btn btn-success btn-lg btn-download btn-download-n']"
-      for i in range(5):
-          try:
-                  # Find and click the download button
-                  download_button = driver.find_element(By.XPATH, download_button_xpath)
-                  download_button.click()
-                  time.sleep(random.uniform(1, 3))
-                  random_mouse_move()
-                  driver.save_screenshot(f"screenshot_{i}.png")
-
-                  # Handle captcha if present
-                  try:
-                      captcha_iframe = WebDriverWait(driver, 10).until(
-                          ec.presence_of_element_located((By.TAG_NAME, 'iframe'))
-                      )
-                      ActionChains(driver).move_to_element(captcha_iframe).click().perform()
-
-                      captcha_box = WebDriverWait(driver, 10).until(
-                          ec.presence_of_element_located((By.ID, 'g-recaptcha-response'))
-                      )
-                      driver.execute_script("arguments[0].click()", captcha_box)
-                      time.sleep(10)
-                  except Exception:
-                      print("Captcha not found")
-          except Exception as e:
-                  print(f"Error: {e}")
-
-
-      # driver.save_screenshot("screenshot_{}.png".format(time.time()))
-      # time.sleep(150)
-      driver.quit()
-
-# run_main_selenium()
-import multiprocessing
+def fetch_links(url):
+    r = requests.get(url, timeout=10)
+    r.raise_for_status()
+    return [l.strip() for l in r.text.splitlines() if l.strip()]
 
 if __name__ == "__main__":
-    num_cores = multiprocessing.cpu_count()
-    print(f"Detected {num_cores} CPU cores.")
+    LINKS_URL = os.environ.get("LINKS_URL", "https://raw.githubusercontent.com/anisidina29/earn/refs/heads/main/videzzz_link.2txt")
+    HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
+    PROXY = os.environ.get("PROXY")  # optional
+    # If CI parallel node index provided, split list:
+    NODE_INDEX = int(os.environ.get("CIRCLE_NODE_INDEX", "0"))
+    NODES_TOTAL = int(os.environ.get("CIRCLE_NODE_TOTAL", "1"))
 
-    # Giới hạn số process tùy theo máy
-    num_processes = min(5, num_cores)  # an toàn trên máy yếu
+    try:
+        links = fetch_links(LINKS_URL)
+    except Exception as e:
+        logging.error("Cannot fetch links: %s", e)
+        links = []
 
-    processes = []
-    for _ in range(num_processes):
-        p = multiprocessing.Process(target=run_main_selenium)
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
+    # split links by node
+    if links:
+        per = max(1, len(links)//NODES_TOTAL)
+        start = NODE_INDEX*per
+        end = start+per if NODE_INDEX < NODES_TOTAL-1 else len(links)
+        mylinks = links[start:end]
+        logging.info("Node %d/%d handling %d links", NODE_INDEX, NODES_TOTAL, len(mylinks))
+        run_worker(mylinks, headless=HEADLESS, proxy=PROXY)
+    else:
+        logging.warning("No links to process.")
