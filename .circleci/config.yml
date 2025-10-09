@@ -54,7 +54,7 @@ jobs:
             for i in 1 2 3; do
               echo "Starting container $i for instance << parameters.instance >>"
               # chạy 15 phút rồi tự dừng
-              timeout 900 docker run --rm myapp:latest &
+              timeout 800 docker run --rm myapp:latest &
               pids+=($!)
             done
 
