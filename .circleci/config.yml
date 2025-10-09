@@ -5,6 +5,8 @@ executors:
     docker:
       - image: cimg/base:stable
     working_directory: ~/repo
+    # Nếu cần tài nguyên mạnh hơn khi chạy 3 container/song song:
+    # resource_class: large
 
 parameters:
   instance:
@@ -19,10 +21,12 @@ jobs:
       - setup_remote_docker
       - run:
           name: Build Docker image
-          command: docker build -t myapp:latest .
+          command: |
+            docker build -t myapp:latest .
       - run:
           name: Save image to workspace
-          command: docker save myapp:latest -o myapp.tar
+          command: |
+            docker save myapp:latest -o myapp.tar
       - persist_to_workspace:
           root: ~/repo
           paths:
@@ -39,22 +43,18 @@ jobs:
       - attach_workspace:
           at: ~/repo
       - run:
-          name: Load image
-          command: docker load -i myapp.tar
-      - run:
-          name: Run 3 containers and auto-stop after 15 min
-          no_output_timeout: 20m
+          name: Load image from workspace
           command: |
-            echo "🚀 Instance << parameters.instance >> running 3 containers (hard stop after 15m)"
-            
-            # tiến trình nền tự dừng Docker sau 900 giây
-            (sleep 900 && echo "⏰ Time limit reached, killing all docker containers..." && pkill -f docker) &
-            killer_pid=$!
-
+            docker load -i myapp.tar
+      - run:
+          name: Run 3 containers in parallel (15 minutes each)
+          command: |
+            echo "Running instance << parameters.instance >>"
             pids=()
             for i in 1 2 3; do
-              echo "Starting container $i"
-              docker run --rm myapp:latest > container_${i}.log 2>&1 &
+              echo "Starting container $i for instance << parameters.instance >>"
+              # chạy 15 phút rồi tự dừng
+              timeout 900 docker run --rm myapp:latest &
               pids+=($!)
             done
 
@@ -62,16 +62,7 @@ jobs:
             for pid in "${pids[@]}"; do
               wait "$pid" || status=1
             done
-
-            # dọn tiến trình killer nếu job kết thúc sớm
-            kill "$killer_pid" 2>/dev/null || true
-
-            echo "⏹ Containers for instance << parameters.instance >> stopped or killed after 15m"
             exit $status
-
-      - store_artifacts:
-          path: .
-          destination: logs
 
 workflows:
   version: 2
