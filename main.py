@@ -57,7 +57,7 @@ def run_main_selenium():
     import requests
 
     # URL chứa file .txt
-    url = "https://raw.githubusercontent.com/anisidina29/earn/refs/heads/main/videzzz_link.2txt"
+    url = "https://raw.githubusercontent.com/anisidina29/earn/refs/heads/main/videzzz_link.txt"
 
     # Tải nội dung từ URL
     response = requests.get(url)
@@ -189,3 +189,4 @@ if __name__ == "__main__":
 
     for p in processes:
         p.join()
+
